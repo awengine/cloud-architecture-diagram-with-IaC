@@ -36,4 +36,3 @@ terraform.rc
 # Ignore credential files
 *.pub
 
-terraform
