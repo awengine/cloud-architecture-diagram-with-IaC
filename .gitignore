@@ -33,4 +33,7 @@ override.tf.json
 .terraformrc
 terraform.rc
 
+# Ignore credential files
+*.pub
+
 terraform
