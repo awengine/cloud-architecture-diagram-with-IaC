@@ -390,3 +390,67 @@ resource "aws_iam_role_policy" "policy-awsconfig" {
 }
 POLICY
 }
+
+resource "aws_config_conformance_pack" "config_conformance_rds" {
+  name = "configRDS"
+  template_body = <<EOT
+Resources:
+  DbInstanceBackupEnabled:
+    Properties:
+      ConfigRuleName: db-instance-backup-enabled
+      Source:
+        Owner: AWS
+        SourceIdentifier: DB_INSTANCE_BACKUP_ENABLED
+    Type: AWS::Config::ConfigRule
+EOT
+  depends_on = [aws_config_configuration_recorder.env-wordpress]
+}
+
+# Cloudtrail
+data "aws_caller_identity" "current" {}
+
+resource "aws_cloudtrail" "env-wordpress" {
+  name                          = "tf-trail-env-wordpress"
+  s3_bucket_name                = aws_s3_bucket.trail-wordpress.id
+  s3_key_prefix                 = "wp"
+  include_global_service_events = true
+}
+
+resource "aws_s3_bucket" "trail-wordpress" {
+  bucket        = "tf-trail-wordpress"
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_policy" "policy-trail-env-wordpress" {
+  bucket = aws_s3_bucket.policy-trail-env-wordpress.id
+  policy = <<POLICY
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AWSCloudTrailAclCheck",
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "cloudtrail.amazonaws.com"
+            },
+            "Action": "s3:GetBucketAcl",
+            "Resource": "${aws_s3_bucket.tf-trail-wordpress.arn}"
+        },
+        {
+            "Sid": "AWSCloudTrailWrite",
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "cloudtrail.amazonaws.com"
+            },
+            "Action": "s3:PutObject",
+            "Resource": "${aws_s3_bucket.tf-trail-wordpress.arn}/prefix/AWSLogs/${data.aws_caller_identity.current.account_id}/*",
+            "Condition": {
+                "StringEquals": {
+                    "s3:x-amz-acl": "bucket-owner-full-control"
+                }
+            }
+        }
+    ]
+}
+POLICY
+}
