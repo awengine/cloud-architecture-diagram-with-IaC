@@ -10,12 +10,12 @@ terraform {
 }
 
 provider "aws" {
-  region = "${var.aws_region}"
+  region = var.aws_region
 }
 
 # VPC
 resource "aws_vpc" "main" {
-  cidr_block = "${var.vpc_cidr}"
+  cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
   tags = {
     "Name" = "VPC-main"
@@ -33,9 +33,9 @@ resource "aws_internet_gateway" "igw" {
 
 # Public Subnets
 resource "aws_subnet" "public_subnet" {
-  vpc_id = aws_vpc.main.id
-  count = length(var.public_subnets_cidr)
-  cidr_block = element(var.private_subnets_cidr, count.index)
+  vpc_id            = aws_vpc.main.id
+  count             = length(var.public_subnets_cidr)
+  cidr_block        = element(var.private_subnets_cidr, count.index)
   availability_zone = element(var.availability_zone, count.index)
   tags = {
     "Name" = "public subnet"
@@ -44,9 +44,9 @@ resource "aws_subnet" "public_subnet" {
 
 # Private Subnets
 resource "aws_subnet" "private_subnet" {
-  vpc_id = aws_vpc.main.id
-  count = length(var.private_subnets_cidr)
-  cidr_block = element(var.public_subnets_cidr, count.index)
+  vpc_id            = aws_vpc.main.id
+  count             = length(var.private_subnets_cidr)
+  cidr_block        = element(var.public_subnets_cidr, count.index)
   availability_zone = element(var.availability_zone, count.index)
   tags = {
     "Name" = "private subnet"
@@ -57,15 +57,15 @@ resource "aws_subnet" "private_subnet" {
 resource "aws_route_table" "public_RT" {
   vpc_id = aws_vpc.main.id
   route {
-    cidr_block = "${var.the_internet_cidr}"
+    cidr_block = var.the_internet_cidr
     gateway_id = aws_internet_gateway.igw.id
   }
 }
 
 # Route Table Association with IGW
 resource "aws_route_table_association" "RT_association" {
-  count = length(var.public_subnets_cidr)
-  subnet_id = element(aws_subnet.public_subnet.*.id, count.index)
+  count          = length(var.public_subnets_cidr)
+  subnet_id      = element(aws_subnet.public_subnet.*.id, count.index)
   route_table_id = aws_route_table.public_RT.id
 }
 
@@ -76,61 +76,82 @@ resource "aws_key_pair" "wordpress-key" {
 }
 
 # Security Groups
-resource "aws_security_group" "ec2-wordpress" {
-  name        = "ec2"
-  vpc_id      = aws_vpc.main.id
+resource "aws_security_group" "mysql" {
+  name   = "mysql"
+  vpc_id = aws_vpc.main.id
   ingress {
-    description      = "HTTP from ALB"
-    from_port        = 80
-    to_port          = 80
-    protocol         = "tcp"
+    description     = "Access from EC2 wordpress"
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ec2-wordpress.id]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["${var.the_internet_cidr}"]
+  }
+  tags = {
+    Name = "mysql"
+  }
+}
+
+resource "aws_security_group" "ec2-wordpress" {
+  name   = "ec2-wordpress"
+  vpc_id = aws_vpc.main.id
+  ingress {
+    description     = "HTTP from ALB"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
     security_groups = [aws_security_group.alb-wordpress.id]
   }
   egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["${var.the_internet_cidr}"]
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["${var.the_internet_cidr}"]
   }
   tags = {
-    Name = "ec2"
+    Name = "ec2-wordpress"
   }
 }
 
 resource "aws_security_group" "alb-wordpress" {
-  name        = "alb-wordpress"
-  vpc_id      = aws_vpc.main.id
+  name   = "alb-wordpress"
+  vpc_id = aws_vpc.main.id
   ingress {
-    description      = "HTTP from the internet"
-    from_port        = 80
-    to_port          = 80
-    protocol         = "tcp"
-    cidr_blocks      = ["${var.the_internet_cidr}"]
+    description = "HTTP from the internet"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["${var.the_internet_cidr}"]
   }
   egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["${var.the_internet_cidr}"]
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["${var.the_internet_cidr}"]
   }
   tags = {
-    Name = "ec2"
+    Name = "alb-wordpress"
   }
 }
 
 # EC2 Wordpress Server
 resource "aws_instance" "wordpress" {
-  count = 2
-  ami           = "${var.image}"
-  instance_type = "t2.micro"
-  key_name = aws_key_pair.wordpress-key.id
-  vpc_security_group_ids = [aws_security_group.ec2-wordpress.id]
-  subnet_id = element(aws_subnet.public_subnet.*.id, 0)
+  count                       = 2
+  ami                         = var.image
+  instance_type               = "t2.micro"
+  key_name                    = aws_key_pair.wordpress-key.id
+  vpc_security_group_ids      = [aws_security_group.ec2-wordpress.id]
+  subnet_id                   = element(aws_subnet.public_subnet.*.id, 0)
   associate_public_ip_address = true
   root_block_device {
-    volume_size = 10
+    volume_size           = 10
     delete_on_termination = true
-    encrypted = true
+    encrypted             = true
   }
   user_data = <<EOF
   #!/bin/bash
@@ -162,7 +183,7 @@ resource "aws_lb_target_group" "alb-wordpress-tg" {
 }
 
 resource "aws_lb_target_group_attachment" "alb-wordpress" {
-  count = length(aws_instance.wordpress)
+  count            = length(aws_instance.wordpress)
   target_group_arn = aws_lb_target_group.alb-wordpress-tg.arn
   target_id        = aws_instance.wordpress[count.index].id
   port             = 80
@@ -181,8 +202,8 @@ resource "aws_lb_listener" "alb-wordpress" {
 # Autoscaling Group
 resource "aws_launch_configuration" "lc-wordpress" {
   name_prefix   = "terraform-lc-"
-  key_name = aws_key_pair.wordpress-key.id
-  image_id      = "${var.image}"
+  key_name      = aws_key_pair.wordpress-key.id
+  image_id      = var.image
   instance_type = "t2.micro"
   lifecycle {
     create_before_destroy = true
@@ -195,7 +216,7 @@ resource "aws_autoscaling_group" "asg-wordpress" {
   min_size                  = 2
   health_check_grace_period = 300
   health_check_type         = "ELB"
-  force_delete = true
+  force_delete              = true
   launch_configuration      = aws_launch_configuration.lc-wordpress.name
   vpc_zone_identifier       = [for subnet in aws_subnet.public_subnet : subnet.id]
   timeouts {
@@ -216,14 +237,14 @@ resource "aws_autoscaling_policy" "asg-policy-wordpress" {
 
 resource "aws_autoscaling_attachment" "asg-attachment-alb" {
   autoscaling_group_name = aws_autoscaling_group.asg-wordpress.id
-  alb_target_group_arn    = aws_lb_target_group.alb-wordpress-tg.arn
+  alb_target_group_arn   = aws_lb_target_group.alb-wordpress-tg.arn
 }
 
 # S3
 resource "aws_s3_bucket" "static-assets" {
   bucket = "wpstorage-static-assets"
   tags = {
-    Name        = "wpstorage-static-assets"
+    Name = "wpstorage-static-assets"
   }
 }
 
@@ -231,3 +252,32 @@ resource "aws_s3_bucket_acl" "static-assets-acl" {
   bucket = aws_s3_bucket.static-assets.id
   acl    = "private"
 }
+
+# RDS
+resource "aws_db_instance" "rds-mysql" {
+  allocated_storage       = 20
+  storage_type            = "gp2"
+  engine                  = "mysql"
+  engine_version          = "8.0.27"
+  instance_class          = "db.t3.micro"
+  multi_az                = true
+  name                    = "RDSmysql"
+  username                = "wordpressAdmin"
+  password                = "${var.rds_mysql_password}"
+  db_subnet_group_name    = "subnet-group-mysql"
+  parameter_group_name    = "default.mysql8.0"
+  option_group_name       = "default:mysql-8-0"
+  backup_retention_period = 7
+  backup_window           = "13:00-14:00"
+  maintenance_window      = "Sat:00:00-Sat:03:00"
+  vpc_security_group_ids      = [aws_security_group.mysql.id]
+}
+
+resource "aws_db_subnet_group" "subnet-group-mysql" {
+  name       = "subnet-group-mysql"
+  subnet_ids = [for subnet in aws_subnet.private_subnet : subnet.id]
+  tags = {
+    Name = "subnet-group-mysql"
+  }
+}
+
