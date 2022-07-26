@@ -285,13 +285,6 @@ resource "aws_db_subnet_group" "subnet-group-mysql" {
 }
 
 # IAM
-resource "aws_iam_user" "wp-developer" {
-  name = "wp-developer"
-  tags = {
-    Name = "wp-developer"
-  }
-}
-
 resource "aws_iam_user_group_membership" "member-developers" {
   user = aws_iam_user.wp-developer.name
   groups = [
@@ -330,4 +323,70 @@ EOF
 resource "aws_iam_group_policy_attachment" "policy-attach" {
   group      = aws_iam_group.developers.name
   policy_arn = aws_iam_policy.developers.arn
+}
+
+resource "aws_iam_user" "wp-developer" {
+  name = "wp-developer"
+  tags = {
+    Name = "wp-developer"
+  }
+}
+
+# Config
+resource "aws_config_delivery_channel" "env-wordpress" {
+  name           = "env-wordpress"
+  s3_bucket_name = aws_s3_bucket.env-wordpress.bucket
+  depends_on     = [aws_config_configuration_recorder.env-wordpress]
+}
+
+resource "aws_s3_bucket" "env-wordpress" {
+  bucket        = "env-wordpress-awsconfig"
+  force_destroy = true
+}
+
+resource "aws_config_configuration_recorder" "env-wordpress" {
+  name     = "env-wordpress"
+  role_arn = aws_iam_role.role-awsconfig.arn
+}
+
+resource "aws_iam_role" "role-awsconfig" {
+  name = "role-awsconfig"
+  assume_role_policy = <<POLICY
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "config.amazonaws.com"
+      },
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
+}
+POLICY
+}
+
+resource "aws_iam_role_policy" "policy-awsconfig" {
+  name = "policy-awsconfig"
+  role = aws_iam_role.role-awsconfig.id
+
+  policy = <<POLICY
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "s3:*"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "${aws_s3_bucket.env-wordpress.arn}",
+        "${aws_s3_bucket.env-wordpress.arn}/*"
+      ]
+    }
+  ]
+}
+POLICY
 }
