@@ -13,6 +13,8 @@
     The internet traffic first reaches the ALB before arriving at EC2. EC2's are only open port 80 to the ALB. No public traffic can reach EC2's directly. 
   - RDS:
     The RDS only accepts internal traffic from EC2's. The only route to access the RDS is from the EC2's.
+  - S3: 
+    Role-based access control is in place. Only EC2 can access the S3 bucket storing static assets of the wordpress server. Only Cloudtrail can access the S3 bucket storing the trail data, etc.
   - IAM:
     One IAM user is created with the permissions to work with EC2, ALB, Autoscaling, RDS, and S3. No permissions of security or networking related granted. 
 

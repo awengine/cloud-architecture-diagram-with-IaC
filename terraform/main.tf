@@ -159,7 +159,8 @@ resource "aws_instance" "wordpress" {
   sudo apt upgrade -y
   EOF
   tags = {
-    "Name" = "wordpress server"
+    "Name" = "wordpress server",
+    "Backup" = "true"
   }
 }
 
@@ -248,9 +249,27 @@ resource "aws_s3_bucket" "static-assets" {
   }
 }
 
-resource "aws_s3_bucket_acl" "static-assets-acl" {
+resource "aws_s3_bucket_policy" "policy-static-assets" {
   bucket = aws_s3_bucket.static-assets.id
-  acl    = "private"
+  policy = <<POLICY
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AWSS3Access",
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "ec2.amazonaws.com"
+            },
+            "Action": "s3:*",
+            "Resource": [
+              "${aws_s3_bucket.static-assets.arn}",
+              "${aws_s3_bucket.static-assets.arn}/*"
+            ]
+        }
+    ]
+}
+POLICY
 }
 
 # RDS
@@ -263,14 +282,14 @@ resource "aws_db_instance" "rds-mysql" {
   multi_az                = true
   name                    = "RDSmysql"
   username                = "wordpressAdmin"
-  password                = "${var.rds_mysql_password}"
+  password                = var.rds_mysql_password
   db_subnet_group_name    = "subnet-group-mysql"
   parameter_group_name    = "default.mysql8.0"
   option_group_name       = "default:mysql-8-0"
   backup_retention_period = 7
   backup_window           = "13:00-14:00"
   maintenance_window      = "Sat:00:00-Sat:03:00"
-  vpc_security_group_ids      = [aws_security_group.mysql.id]
+  vpc_security_group_ids  = [aws_security_group.mysql.id]
   tags = {
     Name = "RDSmysql"
   }
@@ -298,9 +317,9 @@ resource "aws_iam_group" "developers" {
 }
 
 resource "aws_iam_policy" "developers" {
-  name = "policy-developers"
+  name        = "policy-developers"
   description = "IAM policy for developers group"
-  policy = <<EOF
+  policy      = <<EOF
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -350,7 +369,7 @@ resource "aws_config_configuration_recorder" "env-wordpress" {
 }
 
 resource "aws_iam_role" "role-awsconfig" {
-  name = "role-awsconfig"
+  name               = "role-awsconfig"
   assume_role_policy = <<POLICY
 {
   "Version": "2012-10-17",
@@ -392,7 +411,7 @@ POLICY
 }
 
 resource "aws_config_conformance_pack" "config_conformance_rds" {
-  name = "configRDS"
+  name          = "configRDS"
   template_body = <<EOT
 Resources:
   DbInstanceBackupEnabled:
@@ -403,7 +422,7 @@ Resources:
         SourceIdentifier: DB_INSTANCE_BACKUP_ENABLED
     Type: AWS::Config::ConfigRule
 EOT
-  depends_on = [aws_config_configuration_recorder.env-wordpress]
+  depends_on    = [aws_config_configuration_recorder.env-wordpress]
 }
 
 # Cloudtrail
@@ -412,7 +431,6 @@ data "aws_caller_identity" "current" {}
 resource "aws_cloudtrail" "env-wordpress" {
   name                          = "tf-trail-env-wordpress"
   s3_bucket_name                = aws_s3_bucket.trail-wordpress.id
-  s3_key_prefix                 = "wp"
   include_global_service_events = true
 }
 
@@ -421,36 +439,32 @@ resource "aws_s3_bucket" "trail-wordpress" {
   force_destroy = true
 }
 
-resource "aws_s3_bucket_policy" "policy-trail-env-wordpress" {
-  bucket = aws_s3_bucket.policy-trail-env-wordpress.id
+resource "aws_s3_bucket_policy" "policy-trail-wordpress" {
+  bucket = aws_s3_bucket.trail-wordpress.id
+
   policy = <<POLICY
 {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "AWSCloudTrailAclCheck",
-            "Effect": "Allow",
-            "Principal": {
-              "Service": "cloudtrail.amazonaws.com"
-            },
-            "Action": "s3:GetBucketAcl",
-            "Resource": "${aws_s3_bucket.tf-trail-wordpress.arn}"
-        },
-        {
-            "Sid": "AWSCloudTrailWrite",
-            "Effect": "Allow",
-            "Principal": {
-              "Service": "cloudtrail.amazonaws.com"
-            },
-            "Action": "s3:PutObject",
-            "Resource": "${aws_s3_bucket.tf-trail-wordpress.arn}/prefix/AWSLogs/${data.aws_caller_identity.current.account_id}/*",
-            "Condition": {
-                "StringEquals": {
-                    "s3:x-amz-acl": "bucket-owner-full-control"
-                }
-            }
-        }
-    ]
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AWSCloudTrailAclCheck",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudtrail.amazonaws.com"
+      },
+      "Action": "s3:GetBucketAcl",
+      "Resource": "${aws_s3_bucket.trail-wordpress.arn}"
+    },
+    {
+      "Sid": "AWSCloudTrailWrite",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudtrail.amazonaws.com"
+      },
+      "Action": "s3:PutObject",
+      "Resource": "${aws_s3_bucket.trail-wordpress.arn}/*"
+    }
+  ]
 }
 POLICY
 }
