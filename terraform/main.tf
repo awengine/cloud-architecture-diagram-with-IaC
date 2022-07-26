@@ -425,9 +425,7 @@ EOT
   depends_on    = [aws_config_configuration_recorder.env-wordpress]
 }
 
-# Cloudtrail
-data "aws_caller_identity" "current" {}
-
+# Cloudtrail - single region
 resource "aws_cloudtrail" "env-wordpress" {
   name                          = "tf-trail-env-wordpress"
   s3_bucket_name                = aws_s3_bucket.trail-wordpress.id

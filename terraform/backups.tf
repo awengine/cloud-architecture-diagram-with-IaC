@@ -7,6 +7,9 @@ resource "aws_backup_plan" "backup-plan-ec2-daily" {
     lifecycle {
       delete_after = 7
     }
+    recovery_point_tags = {
+      Creator = "aws-backups"
+    }
   }
 }
 
