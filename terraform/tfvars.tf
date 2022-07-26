@@ -27,6 +27,7 @@ variable "availability_zone" {
 }
 
 # EC2
+# Create a key-pair yourself and supply the public key
 variable "public_key" {
     default = "./wordpress-key.pub"
 }

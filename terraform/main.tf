@@ -76,8 +76,29 @@ resource "aws_key_pair" "wordpress-key" {
 }
 
 # Security Groups
-resource "aws_security_group" "ec2" {
+resource "aws_security_group" "ec2-wordpress" {
   name        = "ec2"
+  vpc_id      = aws_vpc.main.id
+  ingress {
+    description      = "HTTP from ALB"
+    from_port        = 80
+    to_port          = 80
+    protocol         = "tcp"
+    security_groups = [aws_security_group.alb-wordpress.id]
+  }
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["${var.the_internet_cidr}"]
+  }
+  tags = {
+    Name = "ec2"
+  }
+}
+
+resource "aws_security_group" "alb-wordpress" {
+  name        = "alb-wordpress"
   vpc_id      = aws_vpc.main.id
   ingress {
     description      = "HTTP from the internet"
@@ -86,14 +107,12 @@ resource "aws_security_group" "ec2" {
     protocol         = "tcp"
     cidr_blocks      = ["${var.the_internet_cidr}"]
   }
-
   egress {
     from_port        = 0
     to_port          = 0
     protocol         = "-1"
     cidr_blocks      = ["${var.the_internet_cidr}"]
   }
-
   tags = {
     Name = "ec2"
   }
@@ -101,10 +120,11 @@ resource "aws_security_group" "ec2" {
 
 # EC2 Wordpress Server
 resource "aws_instance" "wordpress" {
+  count = 2
   ami           = "${var.image}"
   instance_type = "t2.micro"
   key_name = aws_key_pair.wordpress-key.id
-  vpc_security_group_ids = [aws_security_group.ec2.id]
+  vpc_security_group_ids = [aws_security_group.ec2-wordpress.id]
   subnet_id = element(aws_subnet.public_subnet.*.id, 0)
   associate_public_ip_address = true
   root_block_device {
@@ -120,6 +140,83 @@ resource "aws_instance" "wordpress" {
   tags = {
     "Name" = "wordpress server"
   }
+}
+
+# ALB
+resource "aws_lb" "alb-wordpress" {
+  name               = "alb-wordpress"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb-wordpress.id]
+  subnets            = [for subnet in aws_subnet.public_subnet : subnet.id]
+  tags = {
+    Name = "alb-wordpress"
+  }
+}
+
+resource "aws_lb_target_group" "alb-wordpress-tg" {
+  name     = "alb-wordpress-tg"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+}
+
+resource "aws_lb_target_group_attachment" "alb-wordpress" {
+  count = length(aws_instance.wordpress)
+  target_group_arn = aws_lb_target_group.alb-wordpress-tg.arn
+  target_id        = aws_instance.wordpress[count.index].id
+  port             = 80
+}
+
+resource "aws_lb_listener" "alb-wordpress" {
+  load_balancer_arn = aws_lb.alb-wordpress.arn
+  port              = "80"
+  protocol          = "HTTP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.alb-wordpress-tg.arn
+  }
+}
+
+# Autoscaling Group
+resource "aws_launch_configuration" "lc-wordpress" {
+  name_prefix   = "terraform-lc-"
+  key_name = aws_key_pair.wordpress-key.id
+  image_id      = "${var.image}"
+  instance_type = "t2.micro"
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_autoscaling_group" "asg-wordpress" {
+  name                      = "asg-wordpress"
+  max_size                  = 3
+  min_size                  = 2
+  health_check_grace_period = 300
+  health_check_type         = "ELB"
+  force_delete = true
+  launch_configuration      = aws_launch_configuration.lc-wordpress.name
+  vpc_zone_identifier       = [for subnet in aws_subnet.public_subnet : subnet.id]
+  timeouts {
+    delete = "15m"
+  }
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_autoscaling_policy" "asg-policy-wordpress" {
+  name                   = "asg-policy-wordpress"
+  scaling_adjustment     = 3
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 300
+  autoscaling_group_name = aws_autoscaling_group.asg-wordpress.name
+}
+
+resource "aws_autoscaling_attachment" "asg-attachment-alb" {
+  autoscaling_group_name = aws_autoscaling_group.asg-wordpress.id
+  alb_target_group_arn    = aws_lb_target_group.alb-wordpress-tg.arn
 }
 
 # S3
