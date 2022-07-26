@@ -11,3 +11,6 @@ A collection of cloud architecture diagrams and the corresponding IaC templates.
 3. Check vars.tf and confirm the variables are desired. 
 4. Run the template, which will call the dependencies automatically.
 
+## Diagrams
+### aws-scalable-wordpress-terraform
+![aws-scalable-wordpress-terraform](diagrams/aws-scalable-wordpress-terraform.drawio.png)
