@@ -212,8 +212,8 @@ resource "aws_launch_configuration" "lc-wordpress" {
 
 resource "aws_autoscaling_group" "asg-wordpress" {
   name                      = "asg-wordpress"
-  max_size                  = 3
-  min_size                  = 2
+  max_size                  = 2
+  min_size                  = 0
   health_check_grace_period = 300
   health_check_type         = "ELB"
   force_delete              = true
@@ -229,7 +229,7 @@ resource "aws_autoscaling_group" "asg-wordpress" {
 
 resource "aws_autoscaling_policy" "asg-policy-wordpress" {
   name                   = "asg-policy-wordpress"
-  scaling_adjustment     = 3
+  scaling_adjustment     = 2
   adjustment_type        = "ChangeInCapacity"
   cooldown               = 300
   autoscaling_group_name = aws_autoscaling_group.asg-wordpress.name
@@ -271,6 +271,9 @@ resource "aws_db_instance" "rds-mysql" {
   backup_window           = "13:00-14:00"
   maintenance_window      = "Sat:00:00-Sat:03:00"
   vpc_security_group_ids      = [aws_security_group.mysql.id]
+  tags = {
+    Name = "RDSmysql"
+  }
 }
 
 resource "aws_db_subnet_group" "subnet-group-mysql" {
@@ -281,3 +284,50 @@ resource "aws_db_subnet_group" "subnet-group-mysql" {
   }
 }
 
+# IAM
+resource "aws_iam_user" "wp-developer" {
+  name = "wp-developer"
+  tags = {
+    Name = "wp-developer"
+  }
+}
+
+resource "aws_iam_user_group_membership" "member-developers" {
+  user = aws_iam_user.wp-developer.name
+  groups = [
+    aws_iam_group.developers.name,
+  ]
+}
+
+resource "aws_iam_group" "developers" {
+  name = "developers"
+  path = "/users/"
+}
+
+resource "aws_iam_policy" "developers" {
+  name = "policy-developers"
+  description = "IAM policy for developers group"
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "ec2:*",
+        "elasticloadbalancing:*",
+        "autoscaling:*",
+        "rds:*",
+        "s3:*"
+      ],
+      "Effect": "Allow",
+      "Resource": "*"
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_group_policy_attachment" "policy-attach" {
+  group      = aws_iam_group.developers.name
+  policy_arn = aws_iam_policy.developers.arn
+}
