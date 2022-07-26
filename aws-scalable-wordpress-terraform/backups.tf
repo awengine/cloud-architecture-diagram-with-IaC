@@ -1,3 +1,4 @@
+# AWS Backup
 resource "aws_backup_plan" "backup-plan-ec2-daily" {
   name = "backup-plan-ec2-daily"
   rule {

@@ -13,130 +13,10 @@ provider "aws" {
   region = var.aws_region
 }
 
-# VPC
-resource "aws_vpc" "main" {
-  cidr_block           = var.vpc_cidr
-  enable_dns_hostnames = true
-  tags = {
-    "Name" = "VPC-main"
-  }
-}
-
-resource "aws_main_route_table_association" "RT_association_vpc" {
-  vpc_id         = aws_vpc.main.id
-  route_table_id = aws_route_table.public_RT.id
-}
-
-resource "aws_internet_gateway" "igw" {
-  vpc_id = aws_vpc.main.id
-}
-
-# Public Subnets
-resource "aws_subnet" "public_subnet" {
-  vpc_id            = aws_vpc.main.id
-  count             = length(var.public_subnets_cidr)
-  cidr_block        = element(var.private_subnets_cidr, count.index)
-  availability_zone = element(var.availability_zone, count.index)
-  tags = {
-    "Name" = "public subnet"
-  }
-}
-
-# Private Subnets
-resource "aws_subnet" "private_subnet" {
-  vpc_id            = aws_vpc.main.id
-  count             = length(var.private_subnets_cidr)
-  cidr_block        = element(var.public_subnets_cidr, count.index)
-  availability_zone = element(var.availability_zone, count.index)
-  tags = {
-    "Name" = "private subnet"
-  }
-}
-
-# Route Table for Public Subnets
-resource "aws_route_table" "public_RT" {
-  vpc_id = aws_vpc.main.id
-  route {
-    cidr_block = var.the_internet_cidr
-    gateway_id = aws_internet_gateway.igw.id
-  }
-}
-
-# Route Table Association with IGW
-resource "aws_route_table_association" "RT_association" {
-  count          = length(var.public_subnets_cidr)
-  subnet_id      = element(aws_subnet.public_subnet.*.id, count.index)
-  route_table_id = aws_route_table.public_RT.id
-}
-
-# Key Pair
+# Key Pair for EC2
 resource "aws_key_pair" "wordpress-key" {
   key_name   = "wordpress-key"
   public_key = file("${var.public_key}")
-}
-
-# Security Groups
-resource "aws_security_group" "mysql" {
-  name   = "mysql"
-  vpc_id = aws_vpc.main.id
-  ingress {
-    description     = "Access from EC2 wordpress"
-    from_port       = 3306
-    to_port         = 3306
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ec2-wordpress.id]
-  }
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["${var.the_internet_cidr}"]
-  }
-  tags = {
-    Name = "mysql"
-  }
-}
-
-resource "aws_security_group" "ec2-wordpress" {
-  name   = "ec2-wordpress"
-  vpc_id = aws_vpc.main.id
-  ingress {
-    description     = "HTTP from ALB"
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb-wordpress.id]
-  }
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["${var.the_internet_cidr}"]
-  }
-  tags = {
-    Name = "ec2-wordpress"
-  }
-}
-
-resource "aws_security_group" "alb-wordpress" {
-  name   = "alb-wordpress"
-  vpc_id = aws_vpc.main.id
-  ingress {
-    description = "HTTP from the internet"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["${var.the_internet_cidr}"]
-  }
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["${var.the_internet_cidr}"]
-  }
-  tags = {
-    Name = "alb-wordpress"
-  }
 }
 
 # EC2 Wordpress Server
@@ -293,6 +173,7 @@ resource "aws_db_instance" "rds-mysql" {
   tags = {
     Name = "RDSmysql"
   }
+  skip_final_snapshot = true
 }
 
 resource "aws_db_subnet_group" "subnet-group-mysql" {
@@ -459,8 +340,8 @@ resource "aws_s3_bucket_policy" "policy-trail-wordpress" {
       "Principal": {
         "Service": "cloudtrail.amazonaws.com"
       },
-      "Action": "s3:PutObject",
-      "Resource": "${aws_s3_bucket.trail-wordpress.arn}/*"
+      "Action": "s3:*",
+      "Resource": "${aws_s3_bucket.trail-wordpress.arn}/AWSLogs/*"
     }
   ]
 }
