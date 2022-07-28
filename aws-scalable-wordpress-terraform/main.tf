@@ -112,10 +112,15 @@ resource "aws_autoscaling_group" "asg-wordpress" {
 
 resource "aws_autoscaling_policy" "asg-policy-wordpress" {
   name                   = "asg-policy-wordpress"
-  scaling_adjustment     = 2  // desired capacity - must be equal or greater than the min_size
-  adjustment_type        = "ChangeInCapacity"
-  cooldown               = 300
   autoscaling_group_name = aws_autoscaling_group.asg-wordpress.name
+  policy_type = "TargetTrackingScaling"
+  # the average CPU utilization (of ec2) sets to 70 percent; otherwise, asg will increase/decrease the number of ec2
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+    target_value = 70.0  // percent
+  }
 }
 
 resource "aws_autoscaling_attachment" "asg-attachment-alb" {
