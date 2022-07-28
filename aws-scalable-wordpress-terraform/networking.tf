@@ -19,6 +19,7 @@ resource "aws_internet_gateway" "igw" {
 # Public Subnets
 resource "aws_subnet" "public_subnet" {
   vpc_id            = aws_vpc.main.id
+  # how many public subnets to create is decided by the number of cidr blocks prefilled in vars.tf
   count             = length(var.public_subnets_cidr)
   cidr_block        = element(var.private_subnets_cidr, count.index)
   availability_zone = element(var.availability_zone, count.index)
@@ -30,6 +31,7 @@ resource "aws_subnet" "public_subnet" {
 # Private Subnets
 resource "aws_subnet" "private_subnet" {
   vpc_id            = aws_vpc.main.id
+  # how many private subnets to create is decided by the number of cidr blocks prefilled in vars.tf
   count             = length(var.private_subnets_cidr)
   cidr_block        = element(var.public_subnets_cidr, count.index)
   availability_zone = element(var.availability_zone, count.index)

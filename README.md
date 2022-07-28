@@ -13,4 +13,4 @@ A collection of cloud architecture diagrams and the corresponding IaC templates.
 
 ## Diagrams
 ### aws-scalable-wordpress-terraform
-![aws-scalable-wordpress-terraform](diagrams/aws-scalable-wordpress-terraform.drawio.png)
+![aws-scalable-wordpress-terraform](diagrams/aws-scalable-wordpress-terraform.png)

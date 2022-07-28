@@ -27,11 +27,12 @@ variable "availability_zone" {
 }
 
 # EC2
-# Create a key-pair yourself and supply the public key
+# create a key-pair yourself and supply the public key
 variable "public_key" {
   default = "./wordpress-key.pub"
 }
 
+# wordpress based on linux supported by amazon marketplace; need to accept the terms in aws console before using it
 variable "image" {
   default = "ami-000965411c503c8ed"
 }
